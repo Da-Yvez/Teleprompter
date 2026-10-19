@@ -1,0 +1,25 @@
+{
+  "name": "apex-teleprompter",
+  "version": "1.0.0",
+  "description": "Studio Broadcast Teleprompter for News Presenters",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "keywords": ["teleprompter", "broadcast", "studio"],
+  "author": "Yvexa",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^29.1.5",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.yvexa.teleprompter",
+    "productName": "Apex Teleprompter",
+    "win": {
+      "target": "portable",
+      "icon": "logo.jpg"
+    }
+  }
+}

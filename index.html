@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AhasaTV Teleprompter — Studio Broadcast</title>
+  <link rel="icon" type="image/jpeg" href="logo.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@700;800;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&family=Lexend:wght@400;600;700&family=Lora:ital,wght@0,500;0,600;1,400&family=Noto+Sans+Sinhala:wght@400;600;700&family=Oswald:wght@500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-obsidian">
+
+  <div id="studioSplash" class="studio-splash">
+    <div class="splash-curtain curtain-top"></div>
+    <div class="splash-curtain curtain-bottom"></div>
+    
+    <div class="splash-soundstage">
+      <div class="optic-reticle"></div>
+      <div class="optic-glow"></div>
+      
+      <div class="splash-lockup">
+        <div class="splash-emblem-wrap">
+          <img src="logo.jpg" alt="AhasaTV" class="splash-logo" onerror="this.style.display='none'">
+          <div class="emblem-scanline"></div>
+          <div class="emblem-border"></div>
+        </div>
+        
+        <div class="splash-titles">
+          <div class="splash-network">AHASATV</div>
+          <h1 class="splash-main-title">TELEPROMPTER</h1>
+          <div class="splash-badge">
+            <span class="splash-tally-dot"></span>
+            <span class="splash-badge-text">STUDIO BROADCAST ENGINE • READY</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="splash-skip-hint">CLICK OR PRESS ANY KEY TO PROCEED</div>
+    </div>
+  </div>
+
+  <header id="studioHud" class="studio-hud">
+    <div class="hud-left">
+      <div class="tally-box" id="tallyBox">
+        <span class="tally-dot"></span>
+        <span class="tally-label" id="tallyLabel">STANDBY</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="telemetry-label">ELAPSED</span>
+        <span class="telemetry-value" id="elapsedTimer">00:00:00</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="telemetry-label">EST. LEFT</span>
+        <span class="telemetry-value" id="remainingTimer">--:--</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="telemetry-label">WPM</span>
+        <span class="telemetry-value" id="wpmCounter">0</span>
+      </div>
+    </div>
+
+    <div class="hud-center hud-branding-center">
+      <img src="logo.jpg" alt="AhasaTV" class="hud-brand-logo" id="hudLogo" onerror="this.style.display='none'">
+      <span class="hud-brand-title">AhasaTV Teleprompter</span>
+    </div>
+
+    <div class="hud-right">
+      <button class="hud-btn" id="btnQuickEdit" title="Edit Script (E)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <span>SCRIPT</span>
+      </button>
+      <button class="hud-btn" id="btnSettingsToggle" title="Open Settings (S)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>CONFIG</span>
+      </button>
+      <button class="hud-btn" id="btnFullscreen" title="Toggle Fullscreen (F / F11)">
+        <svg id="fullscreenIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        <span>FULLSCREEN</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="prompterViewport" class="prompter-viewport">
+    <div id="eyelineGuide" class="eyeline-guide">
+      <div class="cue-marker cue-left">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><polygon points="0,4 18,12 0,20"></polygon></svg>
+      </div>
+      <div class="cue-beam"></div>
+      <div class="cue-marker cue-right">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><polygon points="24,4 6,12 24,20"></polygon></svg>
+      </div>
+    </div>
+
+    <div id="focusVignette" class="focus-vignette hidden"></div>
+
+    <div id="prompterContent" class="prompter-content">
+      <div id="scriptSpacerTop" class="script-spacer"></div>
+      <article id="scriptDisplay" class="script-display"></article>
+      <div id="scriptSpacerBottom" class="script-spacer"></div>
+    </div>
+  </main>
+
+  <nav id="controlDock" class="control-dock">
+    <div class="dock-core">
+      
+      <button id="btnPrimaryAction" class="btn-play-pause toggle-play" title="Toggle / Play (Space)">
+        <svg id="primaryIconPlay" class="dock-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="6,4 20,12 6,20"></polygon></svg>
+        <svg id="primaryIconPause" class="dock-icon hidden" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+        <span id="primaryActionLabel">START</span>
+      </button>
+
+      <button id="btnRewind" class="btn-dock-icon" title="Rewind to Top (R)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+      </button>
+
+      <div class="dock-divider"></div>
+
+      <div class="control-group mode-toggle-group">
+        <span class="group-label">TRIGGER MODE</span>
+        <div class="toggle-capsule">
+          <button id="modeToggleBtn" class="capsule-btn active">TOGGLE</button>
+          <button id="modeActiveBtn" class="capsule-btn">ACTIVE</button>
+        </div>
+      </div>
+
+      <div class="dock-divider"></div>
+
+      <div class="control-group speed-group">
+        <div class="group-header-row">
+          <span class="group-label">SCROLL SPEED</span>
+          <span id="speedDisplay" class="speed-readout">2.4<small>px/f</small></span>
+        </div>
+        <div class="speed-slider-wrap">
+          <button id="btnSpeedDown" class="micro-btn" title="Decrease speed ([ or Down Arrow])">-</button>
+          <input type="range" id="speedSlider" min="0.2" max="25" step="0.2" value="2.4" class="custom-slider speed-slider">
+          <button id="btnSpeedUp" class="micro-btn" title="Increase speed (] or Up Arrow])">+</button>
+        </div>
+      </div>
+
+      <button id="btnDockMinimize" class="btn-dock-icon dock-collapse-btn" title="Hide Controls (H or Esc)">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+
+    </div>
+  </nav>
+
+  <div id="hudShowTab" class="hud-show-tab hidden">
+    <button id="btnRestoreDock">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+      <span>CONTROLS</span>
+    </button>
+  </div>
+
+  <aside id="settingsDrawer" class="settings-drawer hidden">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <span class="drawer-badge">AHASATV BROADCAST</span>
+        <h2>Prompter Settings</h2>
+      </div>
+      <button id="btnCloseDrawer" class="drawer-close-btn">&times;</button>
+    </div>
+
+    <div class="drawer-body">
+
+      <section class="config-section">
+        <label class="section-heading">BEAMSPLITTER & MIRRORING</label>
+        <div class="mirror-buttons-grid">
+          <button type="button" id="btnFlipH" class="mirror-sidebar-btn" title="Mirror Horizontally (M)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 8 3 12 7 16"></polyline><polyline points="17 8 21 12 17 16"></polyline><line x1="12" y1="2" x2="12" y2="22" stroke-dasharray="2 2"></line></svg>
+            <span class="mirror-btn-label">Flip Horizontal (Glass)</span>
+            <kbd>M</kbd>
+          </button>
+          <button type="button" id="btnFlipV" class="mirror-sidebar-btn" title="Mirror Vertically">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 7 12 3 16 7"></polyline><polyline points="8 17 12 21 16 17"></polyline><line x1="2" y1="12" x2="22" y2="12" stroke-dasharray="2 2"></line></svg>
+            <span class="mirror-btn-label">Flip Vertical (Ceiling)</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="config-section">
+        <label class="section-heading">TYPOGRAPHY</label>
+        
+        <div class="config-item">
+          <span class="config-label">Font Face</span>
+          <select id="fontFamilySelect" class="config-select">
+            <option value="'Inter', sans-serif">Inter (Broadcast Sans)</option>
+            <option value="'Noto Sans Sinhala', sans-serif">Noto Sans Sinhala (සිංහල)</option>
+            <option value="'Outfit', sans-serif">Outfit (Display Clean)</option>
+            <option value="'Lexend', sans-serif">Lexend (High Readability)</option>
+            <option value="'Cabinet Grotesk', sans-serif">Cabinet Grotesk (Modern Bold)</option>
+            <option value="'Oswald', sans-serif">Oswald (Broadcast Display)</option>
+            <option value="'JetBrains Mono', monospace">JetBrains Mono (Technical)</option>
+            <option value="'Lora', serif">Lora (Classic Editorial)</option>
+            <option value="Arial, sans-serif">Arial / System Standard</option>
+          </select>
+        </div>
+
+        <div class="config-item">
+          <span class="config-label">Text Alignment</span>
+          <div class="align-button-group">
+            <button type="button" class="align-btn active" data-align="left" title="Align Left">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 15h18v-2H3v2zm0 4h12v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+              <span>Left</span>
+            </button>
+            <button type="button" class="align-btn" data-align="center" title="Align Center">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M7 15h10v-2H7v2zm-4 4h18v-2H3v2zm4-8h10V9H7v2zm-4-6v2h18V5H3z"/></svg>
+              <span>Center</span>
+            </button>
+            <button type="button" class="align-btn" data-align="right" title="Align Right">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 15h18v-2H3v2zm6 4h12v-2H9v2zm-6-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+              <span>Right</span>
+            </button>
+            <button type="button" class="align-btn" data-align="justify" title="Justify">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 5h18v2H3V5zm0 4h18v2H3V9zm0 4h18v2H3v-2zm0 4h18v2H3v-2z"/></svg>
+              <span>Justify</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="config-item">
+          <div class="config-row-between">
+            <span class="config-label">Font Size</span>
+            <span id="fontSizeValue" class="config-val">58px</span>
+          </div>
+          <input type="range" id="fontSizeSlider" min="24" max="150" step="2" value="58" class="custom-slider">
+        </div>
+
+        <div class="config-item">
+          <div class="config-row-between">
+            <span class="config-label">Line Spacing</span>
+            <span id="lineHeightValue" class="config-val">1.5x</span>
+          </div>
+          <input type="range" id="lineHeightSlider" min="1.1" max="2.8" step="0.05" value="1.5" class="custom-slider">
+        </div>
+
+        <div class="config-item">
+          <div class="config-row-between">
+            <span class="config-label">Letter Spacing</span>
+            <span id="letterSpacingValue" class="config-val">0px</span>
+          </div>
+          <input type="range" id="letterSpacingSlider" min="-2" max="6" step="0.5" value="0" class="custom-slider">
+        </div>
+      </section>
+
+      <section class="config-section">
+        <label class="section-heading">COLORS</label>
+
+        <div class="config-item">
+          <span class="config-label">Font Color</span>
+          <div class="color-options-row">
+            <button type="button" class="swatch-btn font-swatch active" data-color="#ffffff" style="background:#ffffff;" title="Crisp White"></button>
+            <button type="button" class="swatch-btn font-swatch" data-color="#ffe600" style="background:#ffe600;" title="Studio Yellow"></button>
+            <button type="button" class="swatch-btn font-swatch" data-color="#00f0ff" style="background:#00f0ff;" title="Broadcast Cyan"></button>
+            <button type="button" class="swatch-btn font-swatch" data-color="#00ff88" style="background:#00ff88;" title="Neon Green"></button>
+            <button type="button" class="swatch-btn font-swatch" data-color="#ff9900" style="background:#ff9900;" title="Amber"></button>
+            <div class="native-picker-box" title="Custom Font Color">
+              <input type="color" id="fontColorPicker" value="#ffffff">
+              <span id="fontColorHex" class="picker-hex-label">#FFFFFF</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-item">
+          <span class="config-label">Background Color</span>
+          <div class="color-options-row">
+            <button type="button" class="swatch-btn bg-swatch active" data-bgcolor="#000000" style="background:#000000; border:1px solid #333;" title="Pitch Black"></button>
+            <button type="button" class="swatch-btn bg-swatch" data-bgcolor="#08090c" style="background:#08090c; border:1px solid #333;" title="Dark Obsidian"></button>
+            <button type="button" class="swatch-btn bg-swatch" data-bgcolor="#12161f" style="background:#12161f;" title="Deep Slate"></button>
+            <button type="button" class="swatch-btn bg-swatch" data-bgcolor="#f5f6fa" style="background:#f5f6fa;" title="High-Key White"></button>
+            <div class="native-picker-box" title="Custom Background Color">
+              <input type="color" id="bgColorPicker" value="#060709">
+              <span id="bgColorHex" class="picker-hex-label">#060709</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="config-section">
+        <label class="section-heading">LENS & CAMERA GEOMETRY</label>
+
+        <div class="config-toggle-row">
+          <span class="config-label">Show Eyeline Cue Marker</span>
+          <label class="switch-toggle">
+            <input type="checkbox" id="toggleEyelineCue" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="config-item">
+          <div class="config-row-between">
+            <span class="config-label">Eyeline Cue Position</span>
+            <span id="eyelinePosValue" class="config-val">35%</span>
+          </div>
+          <input type="range" id="eyelinePosSlider" min="15" max="80" step="1" value="35" class="custom-slider">
+        </div>
+
+        <div class="config-item">
+          <div class="config-row-between">
+            <span class="config-label">Reading Column Width</span>
+            <span id="columnWidthValue" class="config-val">68%</span>
+          </div>
+          <input type="range" id="columnWidthSlider" min="35" max="95" step="1" value="68" class="custom-slider">
+        </div>
+
+        <div class="config-toggle-row">
+          <span class="config-label">Reading Focus Mask (Dim inactive text)</span>
+          <label class="switch-toggle">
+            <input type="checkbox" id="toggleFocusMask">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="config-toggle-row">
+          <span class="config-label">Reverse Scroll Direction</span>
+          <label class="switch-toggle">
+            <input type="checkbox" id="toggleReverse">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="config-section">
+        <label class="section-heading">BROADCAST HOTKEYS</label>
+        <div class="hotkeys-grid">
+          <div class="hotkey-card"><kbd>Space</kbd><span>Play / Stop / Hold</span></div>
+          <div class="hotkey-card"><kbd>↑</kbd><kbd>↓</kbd><span>Speed Adjust</span></div>
+          <div class="hotkey-card"><kbd>F</kbd><span>Fullscreen</span></div>
+          <div class="hotkey-card"><kbd>M</kbd><span>Mirror Flip H</span></div>
+          <div class="hotkey-card"><kbd>H</kbd><span>Hide Controls</span></div>
+          <div class="hotkey-card"><kbd>R</kbd><span>Reset to Top</span></div>
+          <div class="hotkey-card"><kbd>E</kbd><span>Edit Script</span></div>
+          <div class="hotkey-card"><kbd>S</kbd><span>Settings Drawer</span></div>
+        </div>
+      </section>
+
+      <div class="yvexa-credits-box">
+        <span>Powered by <a href="https://yvexa.dev" target="_blank" rel="noopener noreferrer" class="yvexa-brand-link">Yvexa</a></span>
+      </div>
+
+    </div>
+  </aside>
+
+  <aside id="scriptEditorDrawer" class="script-editor-drawer hidden">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <span class="drawer-badge">AHASATV NEWSROOM</span>
+        <h2>Script Manager</h2>
+      </div>
+      <button id="btnCloseEditor" class="drawer-close-btn">&times;</button>
+    </div>
+
+    <div class="editor-body">
+      <div class="editor-toolbar">
+        <label for="editorFileInput" class="editor-action-btn">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>Choose .TXT File</span>
+        </label>
+        <input type="file" id="editorFileInput" accept=".txt,text/plain" class="visually-hidden">
+
+        <button id="btnLoadSampleScript" class="editor-action-btn secondary">Load Broadcast Sample</button>
+        <button id="btnClearScript" class="editor-action-btn danger">Clear</button>
+
+        <div class="editor-stats">
+          <span id="scriptWordCount">0 Words</span>
+          <span id="scriptCharCount">0 Chars</span>
+        </div>
+      </div>
+
+      <textarea id="scriptTextarea" class="script-textarea" spellcheck="false" placeholder="Paste or type your script here (Unicode & Sinhala supported), or select a .txt file..."></textarea>
+
+      <div class="editor-footer">
+        <button id="btnApplyScript" class="btn-apply-script">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>APPLY TO PROMPTER</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
