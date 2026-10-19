@@ -444,7 +444,9 @@ function showHud() {
 }
 
 function toggleFullscreen() {
-  if (!document.fullscreenElement) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.toggle_fullscreen) {
+    window.pywebview.api.toggle_fullscreen();
+  } else if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(() => {});
   } else {
     document.exitFullscreen().catch(() => {});
