@@ -44,6 +44,8 @@ Broadcast-grade studio teleprompter designed for news presenters, on-camera tale
 | <kbd>Space</kbd> | Play / Pause (Toggle Mode) or Hold-to-roll (Active Mode) |
 | <kbd>↑</kbd> / <kbd>]</kbd> | Increase scroll speed |
 | <kbd>↓</kbd> / <kbd>[</kbd> | Decrease scroll speed |
+| <kbd>N</kbd> | Jump to **next** SLUG section |
+| <kbd>B</kbd> | Jump to **previous** SLUG section |
 | <kbd>F</kbd> / <kbd>F11</kbd> | Toggle true fullscreen |
 | <kbd>M</kbd> | Toggle Horizontal Mirror (Prompter Glass) |
 | <kbd>H</kbd> / <kbd>Esc</kbd> | Hide / Show HUD & dock controls |
@@ -60,12 +62,39 @@ Double-click `Launch-Prompter.bat` on Windows. It will open the application as a
 
 Alternatively, open `index.html` in any modern web browser (Edge, Chrome, Brave, Firefox).
 
-### 2. Standalone Desktop `.exe` Packaging (Optional)
-If you wish to package the app into a standalone Windows `.exe` using Electron:
+### 2. Standalone Desktop `.exe` Packaging (Recommended)
+The app is packaged into a **single lightweight portable `.exe` (~12 MB)** using **PyInstaller + pywebview**.
+This is the preferred build method — no Electron required.
+
+#### Prerequisites
 ```bash
-npm install
-npm run build
+pip install pywebview pyinstaller
 ```
+
+#### Build
+Double-click **`Build-EXE.bat`** in the project folder — it will automatically build and place the `.exe` in the `dist/` folder.
+
+Or run manually:
+```bash
+pyinstaller --onefile --windowed --name "AhasaTV-Teleprompter" --icon=logo.ico ^
+  --add-data "index.html;." ^
+  --add-data "style.css;." ^
+  --add-data "app.js;." ^
+  --add-data "logo.jpg;." ^
+  --add-data "logo.ico;." ^
+  --add-data "sample_script.txt;." ^
+  app.py
+```
+
+Output: `dist\AhasaTV-Teleprompter.exe`
+
+#### Why PyInstaller + pywebview?
+- ✅ **~12 MB** portable single file (vs ~180 MB with Electron)
+- ✅ Uses the system's native WebView2 (Edge engine) — no bundled browser
+- ✅ No installation required — just run the `.exe`
+- ✅ `app.py` already handles PyInstaller's `_MEIPASS` asset paths
+
+> **Note:** Electron (`npm install` / `npm run build`) is also configured in `package.json` but produces a much larger output (~180 MB). Use PyInstaller instead.
 
 ---
 

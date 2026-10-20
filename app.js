@@ -41,7 +41,9 @@ const state = {
   timerInterval: null,
   words: [],
   wpm: 0,
-  hudTimeout: null
+  hudTimeout: null,
+  sections: [],          // parsed SLUG sections: [{name, scrollY, index}]
+  activeSectionIndex: -1 // currently active section index
 };
 
 const dom = {
@@ -111,7 +113,12 @@ const dom = {
   bgColorPicker: document.getElementById('bgColorPicker'),
   bgColorHex: document.getElementById('bgColorHex'),
   fontSwatches: document.querySelectorAll('.font-swatch'),
-  bgSwatches: document.querySelectorAll('.bg-swatch')
+  bgSwatches: document.querySelectorAll('.bg-swatch'),
+  btnSectionsToggle: document.getElementById('btnSectionsToggle'),
+  sectionsDrawer: document.getElementById('sectionsDrawer'),
+  btnCloseSections: document.getElementById('btnCloseSections'),
+  sectionsList: document.getElementById('sectionsList'),
+  sectionCount: document.getElementById('sectionCount')
 };
 
 function initSplashScreen() {
@@ -210,6 +217,8 @@ function setScriptText(text) {
   dom.scriptTextarea.value = clean;
   updateScriptMetrics(clean);
   calculateMaxScroll();
+  // Parse sections after DOM has rendered so we can measure scroll positions
+  requestAnimationFrame(() => requestAnimationFrame(() => parseSections()));
 }
 
 function updateScriptMetrics(text) {
@@ -218,6 +227,172 @@ function updateScriptMetrics(text) {
   dom.scriptWordCount.innerText = `${words.length} Words`;
   dom.scriptCharCount.innerText = `${text.length} Chars`;
 }
+
+// ── SECTION NAVIGATION ─────────────────────────────────────────────────────
+
+function parseSections() {
+  // Match lines like: SLUG - "SECTION NAME"  (case-insensitive)
+  const slugRegex = /^\s*SLUG\s*-\s*["\u201c\u201d](.+?)["\u201c\u201d]\s*$/i;
+  state.sections = [];
+  state.activeSectionIndex = -1;
+
+  // Walk the text nodes / line spans inside scriptDisplay
+  const fullText = dom.display.innerText;
+  const lines = fullText.split('\n');
+
+  // Build a map of cumulative character offsets → scroll positions
+  // We find the scroll Y for each SLUG line by temporarily measuring
+  const displayEl = dom.display;
+  let charOffset = 0;
+
+  // Create a temporary range-based scanner
+  const walker = document.createTreeWalker(displayEl, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) textNodes.push(node);
+
+  // Build a flat array of {node, start, end} for binary search
+  const nodeMap = [];
+  let pos = 0;
+  for (const tn of textNodes) {
+    nodeMap.push({ node: tn, start: pos, end: pos + tn.length });
+    pos += tn.length;
+  }
+
+  let lineStart = 0;
+  lines.forEach((line, lineIdx) => {
+    const match = slugRegex.exec(line);
+    if (match) {
+      const sectionName = match[1].trim();
+      // Find scroll position for this line using Range
+      const scrollY = getScrollYForCharOffset(lineStart, nodeMap);
+      state.sections.push({
+        name: sectionName,
+        scrollY: scrollY,
+        lineIndex: lineIdx
+      });
+    }
+    lineStart += line.length + 1; // +1 for the \n
+  });
+
+  renderSectionsPanel();
+}
+
+function getScrollYForCharOffset(charOffset, nodeMap) {
+  // Find which text node contains this offset
+  for (const entry of nodeMap) {
+    if (charOffset >= entry.start && charOffset <= entry.end) {
+      try {
+        const range = document.createRange();
+        const localOffset = charOffset - entry.start;
+        range.setStart(entry.node, Math.min(localOffset, entry.node.length));
+        range.setEnd(entry.node, Math.min(localOffset, entry.node.length));
+        const rect = range.getBoundingClientRect();
+        const viewportRect = dom.viewport.getBoundingClientRect();
+        // scrollY = current scroll + element offset relative to viewport top
+        return dom.viewport.scrollTop + (rect.top - viewportRect.top);
+      } catch (e) {
+        return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+function renderSectionsPanel() {
+  const count = state.sections.length;
+  dom.sectionsList.innerHTML = '';
+
+  if (count === 0) {
+    dom.sectionCount.classList.add('hidden');
+    dom.sectionsList.innerHTML = '<div class="sections-empty">No SLUG sections detected in this script.</div>';
+    return;
+  }
+
+  dom.sectionCount.textContent = count;
+  dom.sectionCount.classList.remove('hidden');
+
+  state.sections.forEach((section, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'section-item';
+    btn.dataset.index = idx;
+    btn.innerHTML = `
+      <span class="section-item-num">${String(idx + 1).padStart(2, '0')}</span>
+      <span class="section-item-name">${escapeHtml(section.name)}</span>
+      <svg class="section-item-arrow" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    `;
+    btn.addEventListener('click', () => jumpToSection(idx));
+    dom.sectionsList.appendChild(btn);
+  });
+
+  updateActiveSectionUI();
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function jumpToSection(index) {
+  if (index < 0 || index >= state.sections.length) return;
+  state.activeSectionIndex = index;
+  const section = state.sections[index];
+
+  // Scroll the prompter viewport to the section
+  dom.viewport.scrollTo({ top: Math.max(0, section.scrollY - 40), behavior: 'smooth' });
+  state.scrollPos = Math.max(0, section.scrollY - 40);
+
+  // Pause scrolling on jump so presenter can orient
+  if (state.isRunning) setRunningState(false);
+
+  updateActiveSectionUI();
+
+  // Show a brief toast label
+  showSectionToast(section.name, index);
+}
+
+function jumpSectionRelative(delta) {
+  if (state.sections.length === 0) return;
+
+  // If no active section yet, determine which one we're nearest to based on scroll
+  if (state.activeSectionIndex === -1) {
+    const currentScroll = dom.viewport.scrollTop;
+    let nearest = 0;
+    for (let i = 0; i < state.sections.length; i++) {
+      if (state.sections[i].scrollY <= currentScroll + 50) nearest = i;
+    }
+    state.activeSectionIndex = nearest;
+  }
+
+  const next = state.activeSectionIndex + delta;
+  const clamped = Math.max(0, Math.min(state.sections.length - 1, next));
+  jumpToSection(clamped);
+}
+
+function updateActiveSectionUI() {
+  dom.sectionsList.querySelectorAll('.section-item').forEach((btn, idx) => {
+    btn.classList.toggle('active', idx === state.activeSectionIndex);
+  });
+
+  // Scroll the active section item into view inside the panel
+  const activeBtn = dom.sectionsList.querySelector('.section-item.active');
+  if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function showSectionToast(name, index) {
+  let toast = document.getElementById('sectionToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'sectionToast';
+    toast.className = 'section-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<span class="toast-num">§${index + 1}</span><span class="toast-name">${escapeHtml(name)}</span>`;
+  toast.classList.add('visible');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 2200);
+}
+
+// ── END SECTION NAVIGATION ──────────────────────────────────────────────────
 
 function calculateMaxScroll() {
   requestAnimationFrame(() => {
@@ -550,6 +725,21 @@ function setupEventListeners() {
 
   dom.editorFileInput.addEventListener('change', handleFileInput);
 
+  dom.btnSectionsToggle.addEventListener('click', () => {
+    const isOpen = !dom.sectionsDrawer.classList.contains('hidden');
+    // Close other drawers
+    dom.settingsDrawer.classList.add('hidden');
+    dom.scriptEditorDrawer.classList.add('hidden');
+    // Toggle sections drawer
+    dom.sectionsDrawer.classList.toggle('hidden', isOpen);
+    dom.btnSectionsToggle.classList.toggle('active', !isOpen);
+  });
+
+  dom.btnCloseSections.addEventListener('click', () => {
+    dom.sectionsDrawer.classList.add('hidden');
+    dom.btnSectionsToggle.classList.remove('active');
+  });
+
   window.addEventListener('dragover', (e) => e.preventDefault());
   window.addEventListener('drop', (e) => {
     e.preventDefault();
@@ -588,6 +778,8 @@ function setupEventListeners() {
   dom.btnSettingsToggle.addEventListener('click', () => {
     dom.settingsDrawer.classList.toggle('hidden');
     dom.scriptEditorDrawer.classList.add('hidden');
+    dom.sectionsDrawer.classList.add('hidden');
+    dom.btnSectionsToggle.classList.remove('active');
   });
 
   dom.btnCloseDrawer.addEventListener('click', () => {
@@ -597,6 +789,8 @@ function setupEventListeners() {
   dom.btnQuickEdit.addEventListener('click', () => {
     dom.scriptEditorDrawer.classList.toggle('hidden');
     dom.settingsDrawer.classList.add('hidden');
+    dom.sectionsDrawer.classList.add('hidden');
+    dom.btnSectionsToggle.classList.remove('active');
   });
 
   dom.btnCloseEditor.addEventListener('click', () => {
@@ -760,6 +954,12 @@ function setupEventListeners() {
       e.preventDefault();
       dom.settingsDrawer.classList.toggle('hidden');
       dom.scriptEditorDrawer.classList.add('hidden');
+    } else if (e.code === 'KeyN') {
+      e.preventDefault();
+      jumpSectionRelative(1);
+    } else if (e.code === 'KeyB') {
+      e.preventDefault();
+      jumpSectionRelative(-1);
     }
   });
 
