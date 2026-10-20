@@ -71,11 +71,6 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
         <span>SCRIPT</span>
       </button>
-      <button class="hud-btn" id="btnSectionsToggle" title="Script Sections (B / N to navigate)">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-        <span>SECTIONS</span>
-        <span id="sectionCount" class="section-count-badge hidden">0</span>
-      </button>
       <button class="hud-btn" id="btnSettingsToggle" title="Open Settings (S)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span>CONFIG</span>
@@ -336,6 +331,8 @@
           <div class="hotkey-card"><kbd>H</kbd><span>Hide Controls</span></div>
           <div class="hotkey-card"><kbd>R</kbd><span>Reset to Top</span></div>
           <div class="hotkey-card"><kbd>E</kbd><span>Edit Script</span></div>
+          <div class="hotkey-card"><kbd>B</kbd><span>Previous Section</span></div>
+          <div class="hotkey-card"><kbd>N</kbd><span>Next Section</span></div>
           <div class="hotkey-card"><kbd>S</kbd><span>Settings Drawer</span></div>
         </div>
       </section>
@@ -365,12 +362,28 @@
         <input type="file" id="editorFileInput" accept=".txt,text/plain" class="visually-hidden">
 
         <button id="btnLoadSampleScript" class="editor-action-btn secondary">Load Broadcast Sample</button>
+        <button id="btnSectionsToggle" class="editor-action-btn sections-toggle-btn" type="button" title="Detected SLUG sections">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <span>Sections</span>
+          <span id="sectionCount" class="section-count-badge">0</span>
+        </button>
         <button id="btnClearScript" class="editor-action-btn danger">Clear</button>
 
         <div class="editor-stats">
           <span id="scriptWordCount">0 Words</span>
           <span id="scriptCharCount">0 Chars</span>
         </div>
+      </div>
+
+      <div id="sectionsPanel" class="sections-panel hidden">
+        <div class="sections-panel-header">
+          <span class="sections-panel-label">SLUG Sections</span>
+          <div class="sections-panel-actions">
+            <button id="btnInsertSlug" class="editor-action-btn secondary" type="button">Insert SLUG</button>
+            <span class="sections-hotkey-hint">B / N on air</span>
+          </div>
+        </div>
+        <div id="sectionsList" class="sections-list"></div>
       </div>
 
       <textarea id="scriptTextarea" class="script-textarea" spellcheck="false" placeholder="Paste or type your script here (Unicode & Sinhala supported), or select a .txt file..."></textarea>
@@ -381,23 +394,6 @@
           <span>APPLY TO PROMPTER</span>
         </button>
       </div>
-    </div>
-  </aside>
-
-  <aside id="sectionsDrawer" class="sections-drawer hidden">
-    <div class="drawer-header">
-      <div class="drawer-title-group">
-        <span class="drawer-badge">AHASATV NEWSROOM</span>
-        <h2>Script Sections</h2>
-      </div>
-      <div class="sections-drawer-meta">
-        <span id="sectionCount" class="section-count-badge hidden">0</span>
-        <span class="sections-hotkey-hint">B = back &nbsp;|&nbsp; N = next</span>
-      </div>
-      <button id="btnCloseSections" class="drawer-close-btn">&times;</button>
-    </div>
-    <div class="sections-drawer-body">
-      <div id="sectionsList" class="sections-list sections-list-full"></div>
     </div>
   </aside>
 

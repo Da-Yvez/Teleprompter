@@ -1,4 +1,8 @@
-const SAMPLE_NEWS_SCRIPT = `GOOD EVENING. WELCOME TO AHASATV SEVEN O'CLOCK BROADCAST.
+const SAMPLE_NEWS_SCRIPT = `SLUG - "OPENING"
+
+GOOD EVENING. WELCOME TO AHASATV SEVEN O'CLOCK BROADCAST.
+
+SLUG - "TOP STORY"
 
 TOP STORY TONIGHT: A HISTORIC SCIENTIFIC BREAKTHROUGH HAS BEEN ANNOUNCED THIS AFTERNOON BY RESEARCHERS AT THE INTERNATIONAL QUANTUM ALLIANCE. 
 
@@ -6,9 +10,15 @@ AFTER MORE THAN FIVE YEARS OF HIGH-PRECISION EXPERIMENTS, SCIENTISTS HAVE CONFIR
 
 INDUSTRY LEADERS ESTIMATE THIS DISCOVERY COULD CUT GLOBAL ENERGY TRANSMISSION LOSSES BY NEARLY THIRTY PERCENT OVER THE NEXT DECADE.
 
+SLUG - "MARKETS"
+
 TURNING TO ECONOMIC NEWS: FINANCIAL MARKETS EXPERIENCED A SHARP RALLY TODAY IN RESPONSE TO THE BREAKTHROUGH. BENCHMARK INDICES SURGED ACROSS EUROPE AND ASIA, CULMINATING IN RECORD-SETTING CLOSING HIGHS.
 
+SLUG - "DOMESTIC"
+
 IN DOMESTIC AFFAIRS, TRANSPORTATION OFFICIALS HAVE FINALIZED THE UPGRADE SCHEDULE FOR THE HIGH-SPEED RAILWAY EXPANSION. COMMUTERS CAN EXPECT EXPANDED INTERCITY SERVICE STARTING EARLY NEXT SPRING.
+
+SLUG - "TEASE"
 
 COMING UP AFTER THE BREAK: OUR IN-DEPTH REPORT ON HOW AUTOMATED DRONE DELIVERY IS TRANSFORMING EMERGENCY HEALTHCARE IN REMOTE REGIONS. 
 
@@ -43,7 +53,8 @@ const state = {
   wpm: 0,
   hudTimeout: null,
   sections: [],          // parsed SLUG sections: [{name, scrollY, index}]
-  activeSectionIndex: -1 // currently active section index
+  activeSectionIndex: -1, // currently active section index
+  editorSectionIndex: -1
 };
 
 const dom = {
@@ -115,8 +126,8 @@ const dom = {
   fontSwatches: document.querySelectorAll('.font-swatch'),
   bgSwatches: document.querySelectorAll('.bg-swatch'),
   btnSectionsToggle: document.getElementById('btnSectionsToggle'),
-  sectionsDrawer: document.getElementById('sectionsDrawer'),
-  btnCloseSections: document.getElementById('btnCloseSections'),
+  sectionsPanel: document.getElementById('sectionsPanel'),
+  btnInsertSlug: document.getElementById('btnInsertSlug'),
   sectionsList: document.getElementById('sectionsList'),
   sectionCount: document.getElementById('sectionCount')
 };
@@ -226,32 +237,42 @@ function updateScriptMetrics(text) {
   state.words = words;
   dom.scriptWordCount.innerText = `${words.length} Words`;
   dom.scriptCharCount.innerText = `${text.length} Chars`;
+  renderEditorSections();
 }
 
 // ── SECTION NAVIGATION ─────────────────────────────────────────────────────
 
+const SLUG_LINE_REGEX = /^\s*SLUG\s*-\s*["\u201c\u201d](.+?)["\u201c\u201d]\s*$/i;
+
+function extractSlugMatches(text) {
+  const lines = text.split('\n');
+  const matches = [];
+  let charOffset = 0;
+  lines.forEach((line, lineIndex) => {
+    const match = SLUG_LINE_REGEX.exec(line);
+    if (match) {
+      matches.push({
+        name: match[1].trim(),
+        lineIndex,
+        charOffset,
+        line
+      });
+    }
+    charOffset += line.length + 1;
+  });
+  return matches;
+}
+
 function parseSections() {
-  // Match lines like: SLUG - "SECTION NAME"  (case-insensitive)
-  const slugRegex = /^\s*SLUG\s*-\s*["\u201c\u201d](.+?)["\u201c\u201d]\s*$/i;
   state.sections = [];
   state.activeSectionIndex = -1;
 
-  // Walk the text nodes / line spans inside scriptDisplay
-  const fullText = dom.display.innerText;
-  const lines = fullText.split('\n');
-
-  // Build a map of cumulative character offsets → scroll positions
-  // We find the scroll Y for each SLUG line by temporarily measuring
   const displayEl = dom.display;
-  let charOffset = 0;
-
-  // Create a temporary range-based scanner
   const walker = document.createTreeWalker(displayEl, NodeFilter.SHOW_TEXT);
   const textNodes = [];
   let node;
   while ((node = walker.nextNode())) textNodes.push(node);
 
-  // Build a flat array of {node, start, end} for binary search
   const nodeMap = [];
   let pos = 0;
   for (const tn of textNodes) {
@@ -259,23 +280,15 @@ function parseSections() {
     pos += tn.length;
   }
 
-  let lineStart = 0;
-  lines.forEach((line, lineIdx) => {
-    const match = slugRegex.exec(line);
-    if (match) {
-      const sectionName = match[1].trim();
-      // Find scroll position for this line using Range
-      const scrollY = getScrollYForCharOffset(lineStart, nodeMap);
-      state.sections.push({
-        name: sectionName,
-        scrollY: scrollY,
-        lineIndex: lineIdx
-      });
-    }
-    lineStart += line.length + 1; // +1 for the \n
+  extractSlugMatches(displayEl.innerText).forEach((slug) => {
+    state.sections.push({
+      name: slug.name,
+      scrollY: getScrollYForCharOffset(slug.charOffset, nodeMap),
+      lineIndex: slug.lineIndex
+    });
   });
 
-  renderSectionsPanel();
+  renderEditorSections();
 }
 
 function getScrollYForCharOffset(charOffset, nodeMap) {
@@ -299,33 +312,120 @@ function getScrollYForCharOffset(charOffset, nodeMap) {
   return 0;
 }
 
-function renderSectionsPanel() {
-  const count = state.sections.length;
+function renderEditorSections() {
+  const slugs = extractSlugMatches(dom.scriptTextarea.value);
+  const count = slugs.length;
+  dom.sectionCount.textContent = count;
+  dom.sectionCount.classList.toggle('hidden', false);
   dom.sectionsList.innerHTML = '';
 
   if (count === 0) {
-    dom.sectionCount.classList.add('hidden');
-    dom.sectionsList.innerHTML = '<div class="sections-empty">No SLUG sections detected in this script.</div>';
+    state.editorSectionIndex = -1;
+    dom.sectionsList.innerHTML = '<div class="sections-empty">No SLUG sections detected. Use Insert SLUG or write: SLUG - "NAME"</div>';
     return;
   }
 
-  dom.sectionCount.textContent = count;
-  dom.sectionCount.classList.remove('hidden');
+  if (state.editorSectionIndex >= count) state.editorSectionIndex = -1;
 
-  state.sections.forEach((section, idx) => {
-    const btn = document.createElement('button');
-    btn.className = 'section-item';
-    btn.dataset.index = idx;
-    btn.innerHTML = `
+  slugs.forEach((section, idx) => {
+    const row = document.createElement('div');
+    row.className = 'section-item';
+    if (idx === state.editorSectionIndex) row.classList.add('active');
+    row.dataset.index = idx;
+    row.innerHTML = `
       <span class="section-item-num">${String(idx + 1).padStart(2, '0')}</span>
       <span class="section-item-name">${escapeHtml(section.name)}</span>
-      <svg class="section-item-arrow" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      <div class="section-item-actions">
+        <button type="button" class="section-item-action" data-action="jump" title="Jump on prompter">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+        <button type="button" class="section-item-action danger" data-action="remove" title="Remove SLUG line">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
+        </button>
+      </div>
     `;
-    btn.addEventListener('click', () => jumpToSection(idx));
-    dom.sectionsList.appendChild(btn);
+    row.addEventListener('click', (e) => {
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      if (action === 'jump') {
+        e.stopPropagation();
+        jumpToSectionByName(section.name);
+        return;
+      }
+      if (action === 'remove') {
+        e.stopPropagation();
+        removeEditorSection(idx);
+        return;
+      }
+      focusEditorSection(idx);
+    });
+    dom.sectionsList.appendChild(row);
   });
+}
 
-  updateActiveSectionUI();
+function setSectionsPanelOpen(open) {
+  dom.sectionsPanel.classList.toggle('hidden', !open);
+  dom.btnSectionsToggle.classList.toggle('active', open);
+}
+
+function focusEditorSection(index) {
+  const slugs = extractSlugMatches(dom.scriptTextarea.value);
+  const section = slugs[index];
+  if (!section) return;
+  state.editorSectionIndex = index;
+  const ta = dom.scriptTextarea;
+  const end = section.charOffset + section.line.length;
+  ta.focus();
+  ta.setSelectionRange(section.charOffset, end);
+  const styles = getComputedStyle(ta);
+  const lineHeight = parseFloat(styles.lineHeight) || 24;
+  ta.scrollTop = Math.max(0, section.lineIndex * lineHeight - 48);
+  renderEditorSections();
+}
+
+function insertSlugAtCursor() {
+  const ta = dom.scriptTextarea;
+  const value = ta.value;
+  const start = ta.selectionStart;
+  const after = value.slice(ta.selectionEnd);
+  const before = value.slice(0, start);
+  const needsLead = before.length > 0 && !before.endsWith('\n');
+  const needsTrail = after.length > 0 && !after.startsWith('\n');
+  const placeholder = 'SECTION NAME';
+  const slug = `${needsLead ? '\n' : ''}SLUG - "${placeholder}"${needsTrail ? '\n' : ''}`;
+  ta.value = before + slug + after;
+  const nameStart = (before + (needsLead ? '\n' : '') + 'SLUG - "').length;
+  ta.focus();
+  ta.setSelectionRange(nameStart, nameStart + placeholder.length);
+  updateScriptMetrics(ta.value);
+  setSectionsPanelOpen(true);
+  const slugs = extractSlugMatches(ta.value);
+  const insertedIndex = slugs.findIndex((s) => s.charOffset === nameStart - 'SLUG - "'.length);
+  state.editorSectionIndex = insertedIndex >= 0 ? insertedIndex : slugs.length - 1;
+  renderEditorSections();
+}
+
+function removeEditorSection(index) {
+  const ta = dom.scriptTextarea;
+  const slugs = extractSlugMatches(ta.value);
+  const section = slugs[index];
+  if (!section) return;
+  const value = ta.value;
+  let from = section.charOffset;
+  let to = section.charOffset + section.line.length;
+  if (value[to] === '\n') to += 1;
+  else if (from > 0 && value[from - 1] === '\n') from -= 1;
+  ta.value = value.slice(0, from) + value.slice(to);
+  state.editorSectionIndex = -1;
+  updateScriptMetrics(ta.value);
+}
+
+function jumpToSectionByName(name) {
+  const idx = state.sections.findIndex((s) => s.name.toLowerCase() === name.toLowerCase());
+  if (idx === -1) {
+    showSectionToast('Apply script to jump on air', -1);
+    return;
+  }
+  jumpToSection(idx);
 }
 
 function escapeHtml(str) {
@@ -369,13 +469,13 @@ function jumpSectionRelative(delta) {
 }
 
 function updateActiveSectionUI() {
-  dom.sectionsList.querySelectorAll('.section-item').forEach((btn, idx) => {
-    btn.classList.toggle('active', idx === state.activeSectionIndex);
+  const active = state.sections[state.activeSectionIndex];
+  const activeName = active ? active.name.toLowerCase() : '';
+  const slugs = extractSlugMatches(dom.scriptTextarea.value);
+  dom.sectionsList.querySelectorAll('.section-item').forEach((row, idx) => {
+    const match = slugs[idx] && slugs[idx].name.toLowerCase() === activeName;
+    row.classList.toggle('active', match);
   });
-
-  // Scroll the active section item into view inside the panel
-  const activeBtn = dom.sectionsList.querySelector('.section-item.active');
-  if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function showSectionToast(name, index) {
@@ -386,7 +486,8 @@ function showSectionToast(name, index) {
     toast.className = 'section-toast';
     document.body.appendChild(toast);
   }
-  toast.innerHTML = `<span class="toast-num">§${index + 1}</span><span class="toast-name">${escapeHtml(name)}</span>`;
+  const num = index >= 0 ? `<span class="toast-num">§${index + 1}</span>` : '';
+  toast.innerHTML = `${num}<span class="toast-name">${escapeHtml(name)}</span>`;
   toast.classList.add('visible');
   clearTimeout(toast._hideTimer);
   toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 2200);
@@ -726,19 +827,11 @@ function setupEventListeners() {
   dom.editorFileInput.addEventListener('change', handleFileInput);
 
   dom.btnSectionsToggle.addEventListener('click', () => {
-    const isOpen = !dom.sectionsDrawer.classList.contains('hidden');
-    // Close other drawers
-    dom.settingsDrawer.classList.add('hidden');
-    dom.scriptEditorDrawer.classList.add('hidden');
-    // Toggle sections drawer
-    dom.sectionsDrawer.classList.toggle('hidden', isOpen);
-    dom.btnSectionsToggle.classList.toggle('active', !isOpen);
+    setSectionsPanelOpen(dom.sectionsPanel.classList.contains('hidden'));
+    renderEditorSections();
   });
 
-  dom.btnCloseSections.addEventListener('click', () => {
-    dom.sectionsDrawer.classList.add('hidden');
-    dom.btnSectionsToggle.classList.remove('active');
-  });
+  dom.btnInsertSlug.addEventListener('click', insertSlugAtCursor);
 
   window.addEventListener('dragover', (e) => e.preventDefault());
   window.addEventListener('drop', (e) => {
@@ -778,8 +871,6 @@ function setupEventListeners() {
   dom.btnSettingsToggle.addEventListener('click', () => {
     dom.settingsDrawer.classList.toggle('hidden');
     dom.scriptEditorDrawer.classList.add('hidden');
-    dom.sectionsDrawer.classList.add('hidden');
-    dom.btnSectionsToggle.classList.remove('active');
   });
 
   dom.btnCloseDrawer.addEventListener('click', () => {
@@ -789,8 +880,7 @@ function setupEventListeners() {
   dom.btnQuickEdit.addEventListener('click', () => {
     dom.scriptEditorDrawer.classList.toggle('hidden');
     dom.settingsDrawer.classList.add('hidden');
-    dom.sectionsDrawer.classList.add('hidden');
-    dom.btnSectionsToggle.classList.remove('active');
+    renderEditorSections();
   });
 
   dom.btnCloseEditor.addEventListener('click', () => {
