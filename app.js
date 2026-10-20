@@ -54,7 +54,15 @@ const state = {
   hudTimeout: null,
   sections: [],          // parsed SLUG sections: [{name, scrollY, index}]
   activeSectionIndex: -1, // currently active section index
-  editorSectionIndex: -1
+  editorSectionIndex: -1,
+  keyBindings: {
+    playPause: '',
+    nextSlug: '',
+    backSlug: ''
+  },
+  capturingKeyAction: null,
+  activeGamepadInputs: new Set(),
+  activeControllerHoldInput: null
 };
 
 const dom = {
@@ -129,7 +137,9 @@ const dom = {
   sectionsPanel: document.getElementById('sectionsPanel'),
   btnInsertSlug: document.getElementById('btnInsertSlug'),
   sectionsList: document.getElementById('sectionsList'),
-  sectionCount: document.getElementById('sectionCount')
+  sectionCount: document.getElementById('sectionCount'),
+  keymapBindButtons: document.querySelectorAll('[data-key-action]'),
+  keymapClearButtons: document.querySelectorAll('[data-clear-key-action]')
 };
 
 function initSplashScreen() {
@@ -171,6 +181,7 @@ function init() {
   applyGeometry();
   updateSpeedUI();
   updateModeUI();
+  updateKeyMappingUI();
   setupEventListeners();
   requestAnimationFrame(animationLoop);
   resetHudAutoHideTimer();
@@ -196,6 +207,11 @@ function loadStoredPreferences() {
     if (typeof saved.mirrorX === 'boolean') state.mirrorX = saved.mirrorX;
     if (typeof saved.mirrorY === 'boolean') state.mirrorY = saved.mirrorY;
     if (typeof saved.focusMask === 'boolean') state.focusMask = saved.focusMask;
+    if (saved.keyBindings && typeof saved.keyBindings === 'object') {
+      Object.keys(state.keyBindings).forEach((action) => {
+        if (typeof saved.keyBindings[action] === 'string') state.keyBindings[action] = saved.keyBindings[action];
+      });
+    }
   } catch (e) {}
 }
 
@@ -216,10 +232,105 @@ function savePreferences() {
       mode: state.mode,
       mirrorX: state.mirrorX,
       mirrorY: state.mirrorY,
-      focusMask: state.focusMask
+      focusMask: state.focusMask,
+      keyBindings: state.keyBindings
     };
     localStorage.setItem('ahasatv_prompter_config', JSON.stringify(data));
   } catch (e) {}
+}
+
+function formatKeyCode(code) {
+  if (code.startsWith('gamepad:button:')) {
+    const button = Number(code.split(':')[2]);
+    const labels = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'Left Stick', 'Right Stick', 'D-pad Up', 'D-pad Down', 'D-pad Left', 'D-pad Right', 'Xbox'];
+    return labels[button] || `Button ${button + 1}`;
+  }
+  if (code.startsWith('gamepad:axis:')) {
+    const [, , axis, direction] = code.split(':');
+    const stick = Number(axis) === 0 || Number(axis) === 1 ? 'Left Stick' : 'Right Stick';
+    const isHorizontal = Number(axis) % 2 === 0;
+    return `${stick} ${isHorizontal ? (direction === '-1' ? 'Left' : 'Right') : (direction === '-1' ? 'Up' : 'Down')}`;
+  }
+  const labels = {
+    Space: 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+    Escape: 'Esc', Enter: 'Enter', Backspace: 'Backspace', Tab: 'Tab',
+    BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '='
+  };
+  if (labels[code]) return labels[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return `Num ${code.slice(6)}`;
+  return code.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function updateKeyMappingUI() {
+  dom.keymapBindButtons.forEach((button) => {
+    const action = button.dataset.keyAction;
+    const isCapturing = state.capturingKeyAction === action;
+    button.classList.toggle('is-listening', isCapturing);
+    button.querySelector('kbd').textContent = isCapturing ? 'Press a key…' : (state.keyBindings[action] ? formatKeyCode(state.keyBindings[action]) : 'Not set');
+    button.querySelector('span').textContent = isCapturing ? 'Listening' : 'Map key';
+  });
+}
+
+function runMappedAction(action, input = null) {
+  if (action === 'playPause') {
+    if (state.mode === 'active') {
+      state.isHolding = true;
+      state.activeControllerHoldInput = input;
+      setRunningState(true);
+    } else {
+      state.isHolding = false;
+      setRunningState(!state.isRunning);
+    }
+  } else if (action === 'nextSlug') {
+    jumpSectionRelative(1);
+  } else if (action === 'backSlug') {
+    jumpSectionRelative(-1);
+  }
+}
+
+function getGamepadInputs(gamepad) {
+  const inputs = new Set();
+  gamepad.buttons.forEach((button, index) => {
+    if (button.pressed || button.value >= 0.65) inputs.add(`gamepad:button:${index}`);
+  });
+  gamepad.axes.forEach((value, index) => {
+    if (value <= -0.7) inputs.add(`gamepad:axis:${index}:-1`);
+    if (value >= 0.7) inputs.add(`gamepad:axis:${index}:1`);
+  });
+  return inputs;
+}
+
+function pollGamepadInput() {
+  if (!navigator.getGamepads) return;
+  const activeInputs = new Set();
+  Array.from(navigator.getGamepads()).filter(Boolean).forEach((gamepad) => {
+    getGamepadInputs(gamepad).forEach((input) => activeInputs.add(input));
+  });
+
+  const newlyPressed = [...activeInputs].filter((input) => !state.activeGamepadInputs.has(input));
+  const releasedInputs = [...state.activeGamepadInputs].filter((input) => !activeInputs.has(input));
+  state.activeGamepadInputs = activeInputs;
+
+  if (state.mode === 'active' && state.activeControllerHoldInput && releasedInputs.includes(state.activeControllerHoldInput)) {
+    state.isHolding = false;
+    state.activeControllerHoldInput = null;
+    setRunningState(false);
+  }
+
+  if (!newlyPressed.length) return;
+
+  if (state.capturingKeyAction) {
+    state.keyBindings[state.capturingKeyAction] = newlyPressed[0];
+    state.capturingKeyAction = null;
+    updateKeyMappingUI();
+    savePreferences();
+    return;
+  }
+
+  const mappedAction = Object.keys(state.keyBindings).find((action) => newlyPressed.includes(state.keyBindings[action]));
+  if (mappedAction) runMappedAction(mappedAction, state.keyBindings[mappedAction]);
 }
 
 function setScriptText(text) {
@@ -632,6 +743,7 @@ function updateTimerDisplay() {
 }
 
 function animationLoop(timestamp) {
+  pollGamepadInput();
   if (!state.lastTimestamp) state.lastTimestamp = timestamp;
   const delta = Math.min((timestamp - state.lastTimestamp) / 16.666, 3);
   state.lastTimestamp = timestamp;
@@ -748,6 +860,23 @@ function setupEventListeners() {
     if (state.mode === 'toggle') {
       setRunningState(!state.isRunning);
     }
+  });
+
+  dom.keymapBindButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.capturingKeyAction = button.dataset.keyAction;
+      updateKeyMappingUI();
+    });
+  });
+
+  dom.keymapClearButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.clearKeyAction;
+      state.keyBindings[action] = '';
+      if (state.capturingKeyAction === action) state.capturingKeyAction = null;
+      updateKeyMappingUI();
+      savePreferences();
+    });
   });
 
   dom.btnPrimaryAction.addEventListener('mousedown', (e) => {
@@ -996,7 +1125,28 @@ function setupEventListeners() {
   });
 
   window.addEventListener('keydown', (e) => {
+    if (state.capturingKeyAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === 'Escape') {
+        state.capturingKeyAction = null;
+      } else if (!e.repeat) {
+        state.keyBindings[state.capturingKeyAction] = e.code;
+        state.capturingKeyAction = null;
+        savePreferences();
+      }
+      updateKeyMappingUI();
+      return;
+    }
+
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+    const mappedAction = Object.keys(state.keyBindings).find((action) => state.keyBindings[action] === e.code);
+    if (mappedAction) {
+      e.preventDefault();
+      if (!e.repeat) runMappedAction(mappedAction, e.code);
+      return;
+    }
 
     if (e.code === 'Space') {
       e.preventDefault();
@@ -1055,6 +1205,12 @@ function setupEventListeners() {
 
   window.addEventListener('keyup', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if (state.mode === 'active' && state.activeControllerHoldInput === e.code) {
+      state.isHolding = false;
+      state.activeControllerHoldInput = null;
+      setRunningState(false);
+      return;
+    }
     if (e.code === 'Space' && state.mode === 'active') {
       state.isHolding = false;
       setRunningState(false);
