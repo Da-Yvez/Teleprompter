@@ -9,18 +9,22 @@ echo   Powered by PyInstaller + pywebview
 echo ============================================
 echo.
 
+:: Use the Python launcher so the correct installed Python is selected.
+set "PROMPTER_PY=py -3"
+
 :: Check Python is installed
-python --version >nul 2>&1
+%PROMPTER_PY% --version >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     color 0C
-    echo [ERROR] Python is not installed or not in PATH.
-    echo Please install Python from https://python.org and try again.
+    echo [ERROR] Python 3 is not installed or the Python launcher is unavailable.
+    echo Install Python from https://www.python.org/downloads/windows/
+    echo During installation, select "Add python.exe to PATH".
     pause
     exit /b 1
 )
 
 echo [1/3] Checking and installing dependencies...
-pip install pywebview pyinstaller --quiet --upgrade
+%PROMPTER_PY% -m pip install pywebview pyinstaller --quiet --upgrade
 if %ERRORLEVEL% NEQ 0 (
     color 0C
     echo [ERROR] Failed to install dependencies.
@@ -40,7 +44,7 @@ echo.
 echo [3/3] Building EXE (this may take 1-3 minutes)...
 echo.
 
-pyinstaller --onefile --windowed ^
+%PROMPTER_PY% -m PyInstaller --onefile --windowed ^
   --name "AhasaTV-Teleprompter" ^
   --icon=logo.ico ^
   --add-data "index.html;." ^
