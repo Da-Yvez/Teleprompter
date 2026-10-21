@@ -52,9 +52,11 @@ const state = {
   words: [],
   wpm: 0,
   hudTimeout: null,
-  sections: [],          // parsed SLUG sections: [{name, scrollY, index}]
+  sections: [],          // parsed SLUG sections: [{name, element, index}]
   activeSectionIndex: -1, // currently active section index
   editorSectionIndex: -1,
+  isJumping: false,
+  jumpTimer: null,
   keyBindings: {
     playPause: '',
     nextSlug: '',
@@ -138,6 +140,11 @@ const dom = {
   btnInsertSlug: document.getElementById('btnInsertSlug'),
   sectionsList: document.getElementById('sectionsList'),
   sectionCount: document.getElementById('sectionCount'),
+  btnSectionsDropdown: document.getElementById('btnSectionsDropdown'),
+  sectionsDropdownWrap: document.getElementById('sectionsDropdownWrap'),
+  sectionsDropdownMenu: document.getElementById('sectionsDropdownMenu'),
+  sectionsDropdownList: document.getElementById('sectionsDropdownList'),
+  sectionsDropdownCount: document.getElementById('sectionsDropdownCount'),
   keymapBindButtons: document.querySelectorAll('[data-key-action]'),
   keymapClearButtons: document.querySelectorAll('[data-clear-key-action]')
 };
@@ -334,13 +341,39 @@ function pollGamepadInput() {
 }
 
 function setScriptText(text) {
-  const clean = text.trim() ? text : 'Click SCRIPT to paste or load your script.';
-  dom.display.innerText = clean;
-  dom.scriptTextarea.value = clean;
-  updateScriptMetrics(clean);
+  const normalized = (text && text.trim()) ? text.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : 'Click SCRIPT to paste or load your script.';
+  dom.scriptTextarea.value = normalized;
+  renderPrompterDisplay(normalized);
+  updateScriptMetrics(normalized);
   calculateMaxScroll();
-  // Parse sections after DOM has rendered so we can measure scroll positions
-  requestAnimationFrame(() => requestAnimationFrame(() => parseSections()));
+}
+
+function renderPrompterDisplay(text) {
+  const lines = text.split('\n');
+  dom.display.innerHTML = '';
+  const frag = document.createDocumentFragment();
+
+  let sectionCounter = 0;
+  lines.forEach((line, index) => {
+    const match = SLUG_LINE_REGEX.exec(line);
+    if (match) {
+      const span = document.createElement('span');
+      span.className = 'prompter-slug-line';
+      span.dataset.sectionIdx = String(sectionCounter);
+      span.dataset.sectionName = match[1].trim();
+      span.textContent = line;
+      frag.appendChild(span);
+      sectionCounter++;
+    } else {
+      frag.appendChild(document.createTextNode(line));
+    }
+    if (index < lines.length - 1) {
+      frag.appendChild(document.createTextNode('\n'));
+    }
+  });
+
+  dom.display.appendChild(frag);
+  parseSections();
 }
 
 function updateScriptMetrics(text) {
@@ -356,7 +389,7 @@ function updateScriptMetrics(text) {
 const SLUG_LINE_REGEX = /^\s*SLUG\s*-\s*["\u201c\u201d](.+?)["\u201c\u201d]\s*$/i;
 
 function extractSlugMatches(text) {
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   const matches = [];
   let charOffset = 0;
   lines.forEach((line, lineIndex) => {
@@ -369,58 +402,119 @@ function extractSlugMatches(text) {
         line
       });
     }
-    charOffset += line.length + 1;
+    const nextNewline = text.indexOf('\n', charOffset);
+    if (nextNewline !== -1) {
+      charOffset = nextNewline + 1;
+    } else {
+      charOffset += line.length;
+    }
   });
   return matches;
 }
 
 function parseSections() {
   state.sections = [];
-  state.activeSectionIndex = -1;
+  const slugElements = dom.display.querySelectorAll('.prompter-slug-line');
 
-  const displayEl = dom.display;
-  const walker = document.createTreeWalker(displayEl, NodeFilter.SHOW_TEXT);
-  const textNodes = [];
-  let node;
-  while ((node = walker.nextNode())) textNodes.push(node);
-
-  const nodeMap = [];
-  let pos = 0;
-  for (const tn of textNodes) {
-    nodeMap.push({ node: tn, start: pos, end: pos + tn.length });
-    pos += tn.length;
-  }
-
-  extractSlugMatches(displayEl.innerText).forEach((slug) => {
+  slugElements.forEach((el, idx) => {
     state.sections.push({
-      name: slug.name,
-      scrollY: getScrollYForCharOffset(slug.charOffset, nodeMap),
-      lineIndex: slug.lineIndex
+      index: idx,
+      name: el.dataset.sectionName || `Section ${idx + 1}`,
+      element: el
     });
   });
 
   renderEditorSections();
+  renderSectionsDropdown();
+  updateActiveSectionUI();
 }
 
-function getScrollYForCharOffset(charOffset, nodeMap) {
-  // Find which text node contains this offset
-  for (const entry of nodeMap) {
-    if (charOffset >= entry.start && charOffset <= entry.end) {
-      try {
-        const range = document.createRange();
-        const localOffset = charOffset - entry.start;
-        range.setStart(entry.node, Math.min(localOffset, entry.node.length));
-        range.setEnd(entry.node, Math.min(localOffset, entry.node.length));
-        const rect = range.getBoundingClientRect();
-        const viewportRect = dom.viewport.getBoundingClientRect();
-        // scrollY = current scroll + element offset relative to viewport top
-        return dom.viewport.scrollTop + (rect.top - viewportRect.top);
-      } catch (e) {
-        return 0;
-      }
-    }
+function toggleSectionsDropdown(open) {
+  if (!dom.sectionsDropdownMenu) return;
+  const isHidden = dom.sectionsDropdownMenu.classList.contains('hidden');
+  const shouldOpen = typeof open === 'boolean' ? open : isHidden;
+
+  dom.sectionsDropdownMenu.classList.toggle('hidden', !shouldOpen);
+  if (dom.sectionsDropdownWrap) {
+    dom.sectionsDropdownWrap.classList.toggle('open', shouldOpen);
   }
-  return 0;
+
+  if (shouldOpen) {
+    dom.settingsDrawer.classList.add('hidden');
+    dom.scriptEditorDrawer.classList.add('hidden');
+    renderSectionsDropdown();
+  }
+}
+
+function closeSectionsDropdown() {
+  toggleSectionsDropdown(false);
+}
+
+function renderSectionsDropdown() {
+  if (!dom.sectionsDropdownList) return;
+  dom.sectionsDropdownList.innerHTML = '';
+  const count = state.sections.length;
+  if (dom.sectionsDropdownCount) {
+    dom.sectionsDropdownCount.textContent = count;
+  }
+
+  if (count === 0) {
+    dom.sectionsDropdownList.innerHTML = '<div class="sections-dropdown-empty">No SLUG sections detected in script</div>';
+    return;
+  }
+
+  state.sections.forEach((section, idx) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'sections-dropdown-item';
+    if (idx === state.activeSectionIndex) item.classList.add('active');
+    item.dataset.index = idx;
+
+    const numSpan = document.createElement('span');
+    numSpan.className = 'dropdown-item-num';
+    numSpan.textContent = `SEC ${String(idx + 1).padStart(2, '0')}`;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'dropdown-item-name';
+    nameSpan.textContent = section.name;
+
+    item.appendChild(numSpan);
+    item.appendChild(nameSpan);
+
+    if (idx === state.activeSectionIndex) {
+      const liveBadge = document.createElement('span');
+      liveBadge.className = 'dropdown-item-current';
+      liveBadge.textContent = 'ON AIR';
+      item.appendChild(liveBadge);
+    }
+
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      jumpToSection(idx);
+      closeSectionsDropdown();
+    });
+
+    dom.sectionsDropdownList.appendChild(item);
+  });
+}
+
+function getExactSectionCenterScrollY(index) {
+  if (index < 0 || index >= state.sections.length) return 0;
+  const section = state.sections[index];
+  const el = section.element || dom.display.querySelector(`[data-section-idx="${index}"]`);
+  if (!el) return 0;
+
+  const elRect = el.getBoundingClientRect();
+  const viewportRect = dom.viewport.getBoundingClientRect();
+
+  // Vertical center of the slug element
+  const elCenter = elRect.top + elRect.height / 2;
+  // Vertical center of the viewport
+  const viewportCenter = viewportRect.top + viewportRect.height / 2;
+
+  // Exact scroll target to center the slug element
+  const targetScroll = Math.round(dom.viewport.scrollTop + (elCenter - viewportCenter));
+  return Math.max(0, targetScroll);
 }
 
 function renderEditorSections() {
@@ -441,7 +535,7 @@ function renderEditorSections() {
   slugs.forEach((section, idx) => {
     const row = document.createElement('div');
     row.className = 'section-item';
-    if (idx === state.editorSectionIndex) row.classList.add('active');
+    if (idx === state.activeSectionIndex) row.classList.add('active');
     row.dataset.index = idx;
     row.innerHTML = `
       <span class="section-item-num">${String(idx + 1).padStart(2, '0')}</span>
@@ -459,7 +553,7 @@ function renderEditorSections() {
       const action = e.target.closest('[data-action]')?.dataset.action;
       if (action === 'jump') {
         e.stopPropagation();
-        jumpToSectionByName(section.name);
+        jumpToSection(idx);
         return;
       }
       if (action === 'remove') {
@@ -548,45 +642,86 @@ function jumpToSection(index) {
   state.activeSectionIndex = index;
   const section = state.sections[index];
 
-  // Scroll the prompter viewport to the section
-  dom.viewport.scrollTo({ top: Math.max(0, section.scrollY - 40), behavior: 'smooth' });
-  state.scrollPos = Math.max(0, section.scrollY - 40);
-
   // Pause scrolling on jump so presenter can orient
   if (state.isRunning) setRunningState(false);
 
-  updateActiveSectionUI();
+  // Calculate position that places the section slug line in the exact center of the screen
+  const targetScroll = getExactSectionCenterScrollY(index);
 
-  // Show a brief toast label
+  state.isJumping = true;
+  clearTimeout(state.jumpTimer);
+  state.jumpTimer = setTimeout(() => {
+    state.isJumping = false;
+  }, 700);
+
+  dom.viewport.scrollTo({ top: targetScroll, behavior: 'smooth' });
+  state.scrollPos = targetScroll;
+
+  updateActiveSectionUI();
   showSectionToast(section.name, index);
 }
 
 function jumpSectionRelative(delta) {
   if (state.sections.length === 0) return;
 
-  // If no active section yet, determine which one we're nearest to based on scroll
+  let targetIndex;
   if (state.activeSectionIndex === -1) {
-    const currentScroll = dom.viewport.scrollTop;
-    let nearest = 0;
-    for (let i = 0; i < state.sections.length; i++) {
-      if (state.sections[i].scrollY <= currentScroll + 50) nearest = i;
-    }
-    state.activeSectionIndex = nearest;
+    targetIndex = 0;
+  } else {
+    targetIndex = state.activeSectionIndex + delta;
   }
 
-  const next = state.activeSectionIndex + delta;
-  const clamped = Math.max(0, Math.min(state.sections.length - 1, next));
+  const clamped = Math.max(0, Math.min(state.sections.length - 1, targetIndex));
   jumpToSection(clamped);
 }
 
+function updateActiveSectionFromScroll() {
+  if (state.isJumping || state.sections.length === 0) return;
+
+  const viewportRect = dom.viewport.getBoundingClientRect();
+  const viewportCenter = viewportRect.top + viewportRect.height / 2;
+
+  let nearestIdx = 0;
+  let minDiff = Infinity;
+
+  for (let i = 0; i < state.sections.length; i++) {
+    const el = state.sections[i].element || dom.display.querySelector(`[data-section-idx="${i}"]`);
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    const elCenter = rect.top + rect.height / 2;
+    const diff = Math.abs(elCenter - viewportCenter);
+    if (diff < minDiff) {
+      minDiff = diff;
+      nearestIdx = i;
+    }
+  }
+
+  if (state.activeSectionIndex !== nearestIdx) {
+    state.activeSectionIndex = nearestIdx;
+    updateActiveSectionUI();
+  }
+}
+
 function updateActiveSectionUI() {
-  const active = state.sections[state.activeSectionIndex];
-  const activeName = active ? active.name.toLowerCase() : '';
-  const slugs = extractSlugMatches(dom.scriptTextarea.value);
   dom.sectionsList.querySelectorAll('.section-item').forEach((row, idx) => {
-    const match = slugs[idx] && slugs[idx].name.toLowerCase() === activeName;
-    row.classList.toggle('active', match);
+    row.classList.toggle('active', idx === state.activeSectionIndex);
   });
+
+  if (dom.sectionsDropdownList) {
+    dom.sectionsDropdownList.querySelectorAll('.sections-dropdown-item').forEach((item, idx) => {
+      const isActive = idx === state.activeSectionIndex;
+      item.classList.toggle('active', isActive);
+      const badge = item.querySelector('.dropdown-item-current');
+      if (isActive && !badge) {
+        const b = document.createElement('span');
+        b.className = 'dropdown-item-current';
+        b.textContent = 'ON AIR';
+        item.appendChild(b);
+      } else if (!isActive && badge) {
+        badge.remove();
+      }
+    });
+  }
 }
 
 function showSectionToast(name, index) {
@@ -597,7 +732,7 @@ function showSectionToast(name, index) {
     toast.className = 'section-toast';
     document.body.appendChild(toast);
   }
-  const num = index >= 0 ? `<span class="toast-num">§${index + 1}</span>` : '';
+  const num = index >= 0 ? `<span class="toast-num">SEC ${String(index + 1).padStart(2, '0')}</span>` : '';
   toast.innerHTML = `${num}<span class="toast-name">${escapeHtml(name)}</span>`;
   toast.classList.add('visible');
   clearTimeout(toast._hideTimer);
@@ -762,6 +897,7 @@ function animationLoop(timestamp) {
 
     dom.viewport.scrollTop = state.scrollPos;
     computeTelemetry();
+    updateActiveSectionFromScroll();
   } else {
     state.scrollPos = dom.viewport.scrollTop;
   }
@@ -997,9 +1133,23 @@ function setupEventListeners() {
     resetHudAutoHideTimer();
   });
 
+  if (dom.btnSectionsDropdown) {
+    dom.btnSectionsDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSectionsDropdown();
+    });
+  }
+
+  window.addEventListener('click', (e) => {
+    if (dom.sectionsDropdownWrap && !dom.sectionsDropdownWrap.contains(e.target)) {
+      closeSectionsDropdown();
+    }
+  });
+
   dom.btnSettingsToggle.addEventListener('click', () => {
     dom.settingsDrawer.classList.toggle('hidden');
     dom.scriptEditorDrawer.classList.add('hidden');
+    closeSectionsDropdown();
   });
 
   dom.btnCloseDrawer.addEventListener('click', () => {
@@ -1009,6 +1159,7 @@ function setupEventListeners() {
   dom.btnQuickEdit.addEventListener('click', () => {
     dom.scriptEditorDrawer.classList.toggle('hidden');
     dom.settingsDrawer.classList.add('hidden');
+    closeSectionsDropdown();
     renderEditorSections();
   });
 
@@ -1178,6 +1329,10 @@ function setupEventListeners() {
       savePreferences();
     } else if (e.code === 'KeyH' || e.code === 'Escape') {
       e.preventDefault();
+      if (dom.sectionsDropdownMenu && !dom.sectionsDropdownMenu.classList.contains('hidden')) {
+        closeSectionsDropdown();
+        return;
+      }
       if (state.hudHidden) {
         showHud();
       } else {
@@ -1188,10 +1343,12 @@ function setupEventListeners() {
       rewindToTop();
     } else if (e.code === 'KeyE') {
       e.preventDefault();
+      closeSectionsDropdown();
       dom.scriptEditorDrawer.classList.toggle('hidden');
       dom.settingsDrawer.classList.add('hidden');
     } else if (e.code === 'KeyS') {
       e.preventDefault();
+      closeSectionsDropdown();
       dom.settingsDrawer.classList.toggle('hidden');
       dom.scriptEditorDrawer.classList.add('hidden');
     } else if (e.code === 'KeyN') {
@@ -1221,6 +1378,7 @@ function setupEventListeners() {
     if (!state.isRunning) {
       state.scrollPos = dom.viewport.scrollTop;
       computeTelemetry();
+      updateActiveSectionFromScroll();
     }
   }, { passive: true });
 }
