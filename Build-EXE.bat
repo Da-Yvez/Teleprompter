@@ -9,14 +9,15 @@ echo   Powered by PyInstaller + pywebview
 echo ============================================
 echo.
 
-:: Use the Python launcher so the correct installed Python is selected.
-set "PROMPTER_PY=py -3"
+:: Detect Python command
+set "PROMPTER_PY=python"
+py -3 --version >nul 2>&1 && set "PROMPTER_PY=py -3"
 
 :: Check Python is installed
 %PROMPTER_PY% --version >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     color 0C
-    echo [ERROR] Python 3 is not installed or the Python launcher is unavailable.
+    echo [ERROR] Python 3 is not installed or unavailable in PATH.
     echo Install Python from https://www.python.org/downloads/windows/
     echo During installation, select "Add python.exe to PATH".
     pause
